@@ -483,11 +483,20 @@ class LeggedRobotBase(BaseTask):
         self.rew_buf[:] = 0.
         for i in range(len(self.reward_functions)):
             name = self.reward_names[i]
-            rew = self.reward_functions[i]() * self.reward_scales[name]
+            rew = self.reward_functions[i]()
+            # Robust shape guard: ensure [num_envs]
+            if not hasattr(rew, 'shape'):
+                logger.error(f"Reward {name} returned non-tensor output: {type(rew)}")
+                raise ValueError(f"Reward {name} returned non-tensor output: {type(rew)}")
+            if rew.ndim >= 2 and rew.shape[0] == self.num_envs:
+                # Auto-reduce any extra dims deterministically
+                rew = rew.reshape(self.num_envs, -1).mean(dim=1)
             try:
-                assert rew.shape[0] == self.num_envs
-            except:
-                import ipdb; ipdb.set_trace()
+                assert rew.shape[0] == self.num_envs and rew.ndim == 1
+            except Exception as e:
+                logger.error(f"Reward {name} produced invalid shape {rew.shape}, expected [{self.num_envs}]")
+                raise
+            rew = rew * self.reward_scales[name]
             # penalty curriculum
             if name in self.config.rewards.reward_penalty_reward_names:
                 if self.config.rewards.reward_penalty_curriculum:

@@ -1,0 +1,125 @@
+# @package _global_
+# 大步行走奖励配置 - 无参考轨迹，纯奖励函数驱动
+
+rewards:
+  set_reward: Big_Stride_Walking
+  set_reward_date: 20251029
+  only_positive_rewards: False
+
+  # ============ 核心奖励：前进优先！============
+  reward_scales:
+    # 🔥🔥🔥 绝对优先：前进！前进！前进！
+    forward_progress: 80.0        # 🔥🔥🔥 超高权重！必须前进
+    forward_velocity: 80.0        # 🔥🔥🔥 大幅提升！持续前进
+    
+    # 相位和节奏（大幅降低，避免限制前进）
+    phase_foot_contact: 50.0       # 🔥 大幅降低！不阻碍前进
+    slow_cadence: 20.0             # 🔥 最低优先级
+    
+    # 步幅质量（降低）
+    big_stride: 20.0               # 降低！先学会走
+    
+    # 步态质量（大幅降低）
+    stride_symmetry: 15.0          # 大幅降低
+    feet_contact_alternation: 2.0  # 最低
+    feet_clearance: 40.0           # 降低
+    feet_distance: 40.0            # 降低
+    
+    # 🔥 姿态稳定性（提高，控制方向和手臂）
+    upright_posture: 50.0          # 🔥 提高！保持直立
+    base_height: 30.0              # 🔥 提高！稳定高度
+    heading_stability: 150.0       # 🔥🔥🔥 大幅提高！必须保持直线
+    
+    # 🔥 运动平滑度（几乎移除）
+    low_base_motion: -0.5          # 🔥🔥 极低！完全允许动态
+    smooth_motion: -0.01           # 🔥🔥 极低！
+    low_torque: -0.000001          # 🔥🔥 极低！
+    
+    # 🔥🔥 脚部运动约束（几乎移除）
+    penalty_feet_lateral_motion: -1         # 🔥🔥 极低！
+    penalty_feet_lateral_deviation: -1      # 🔥🔥 极低！
+    penalty_feet_distance_violation: -0.2     # 🔥🔥 极低！
+    
+    # 基础惩罚（提高，控制方向和手臂）
+    penalty_orientation: -2.0      # 🔥 提高！保持姿态
+    penalty_lin_vel_z: -1.0        # 🔥 提高！减少跳动
+    penalty_ang_vel_xy: -0.5       # 🔥 提高！限制摆动
+    penalty_ang_vel_z: -3.0        # 🔥🔥🔥 大幅提高！严格限制转向
+    penalty_dof_acc: -0.00005      # 🔥 提高！平滑动作
+    penalty_action_rate: -0.05     # 🔥 提高！减少突变
+    penalty_arm_motion: -1.0       # 🔥🔥🔥 新增！严格限制手臂乱甩
+    
+    # 限制惩罚（降低）
+    limits_dof_pos: -0.5           # 🔥 降低
+    limits_dof_vel: -0.2           # 🔥 降低
+    limits_torque: -0.2            # 🔥 降低
+    
+    # 终止惩罚（降低，鼓励探索）
+    termination: -50.0             # 🔥 大幅降低（原-200）
+
+  # ============ 奖励函数参数（sigma控制容忍度）============
+  reward_tracking_sigma:
+    forward_velocity: 0.3          # 收紧！鼓励达到目标速度
+    big_stride: 0.2                # 适中！允许步幅变化
+    stride_symmetry: 0.15          # 对称性容忍度
+    upright_posture: 0.15          # 放宽！允许动态姿态
+    base_height: 0.15              # 放宽！允许高度变化
+    heading_stability: 0.2         # 放宽！有终止条件
+    slow_cadence: 0.3              # 放宽！节奏不是首要目标
+
+  # ============ 惩罚课程学习 ============
+  reward_penalty_curriculum: True
+  reward_initial_penalty_scale: 0.1    # 初始惩罚缩放
+  reward_min_penalty_scale: 0.0
+  reward_max_penalty_scale: 1.0
+  reward_penalty_level_down_threshold: 80   # episode长度低于此值，降低惩罚
+  reward_penalty_level_up_threshold: 120    # episode长度高于此值，提高惩罚
+  reward_penalty_degree: 0.00001            # 惩罚变化速度
+  num_compute_average_epl: 10000
+  
+  reward_penalty_reward_names: [
+    "penalty_orientation",
+    "penalty_lin_vel_z",
+    "penalty_ang_vel_xy",
+    "penalty_ang_vel_z",
+    "penalty_dof_acc",
+    "penalty_action_rate",
+    "penalty_arm_motion",
+    "penalty_feet_lateral_motion",
+    "penalty_feet_lateral_deviation",
+    "penalty_feet_distance_violation",
+    "limits_dof_pos",
+    "limits_dof_vel",
+    "limits_torque"]
+
+  # ============ 关节限制课程学习 ============
+  reward_limit:
+    soft_dof_pos_limit: 0.95
+    soft_dof_vel_limit: 0.95
+    soft_torque_limit: 0.90
+
+    reward_limits_curriculum:
+      soft_dof_pos_curriculum: True
+      soft_dof_pos_initial_limit: 1.20
+      soft_dof_pos_max_limit: 1.20
+      soft_dof_pos_min_limit: 0.95
+      soft_dof_pos_curriculum_degree: 0.00000015
+      soft_dof_pos_curriculum_level_down_threshold: 80
+      soft_dof_pos_curriculum_level_up_threshold: 120
+
+      soft_dof_vel_curriculum: True
+      soft_dof_vel_initial_limit: 1.25
+      soft_dof_vel_max_limit: 1.30
+      soft_dof_vel_min_limit: 0.95
+      soft_dof_vel_curriculum_degree: 0.00000015
+      soft_dof_vel_curriculum_level_down_threshold: 80
+      soft_dof_vel_curriculum_level_up_threshold: 120
+
+      soft_torque_curriculum: True
+      soft_torque_initial_limit: 1.20
+      soft_torque_max_limit: 1.30
+      soft_torque_min_limit: 0.85
+      soft_torque_curriculum_degree: 0.00000015
+      soft_torque_curriculum_level_down_threshold: 80
+      soft_torque_curriculum_level_up_threshold: 120
+

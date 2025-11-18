@@ -1,0 +1,8 @@
+# @package _global_
+
+defaults:
+  - /algo: ppo
+  - /env: standing
+
+experiment_name: TEST_Standing
+

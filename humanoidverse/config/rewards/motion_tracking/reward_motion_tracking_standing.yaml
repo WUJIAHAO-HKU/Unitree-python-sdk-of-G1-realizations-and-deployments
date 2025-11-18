@@ -1,0 +1,119 @@
+# @package _global_
+# 为站立任务优化的Motion Tracking奖励配置
+# 相比标准motion_tracking，更注重稳定性而非精确匹配
+
+rewards:
+  set_reward: Motion_Tracking_Standing_Optimized
+  set_reward_date: 20251017
+  only_positive_rewards: False
+
+  # Body position weights
+  teleop_body_pos_lowerbody_weight: 0.5
+  teleop_body_pos_upperbody_weight: 1.0
+
+  # Tracking sigma parameters (大幅放宽，适合静态站立姿态)
+  # sigma越大，容忍的偏差越大，奖励下降越慢
+  reward_tracking_sigma:
+    teleop_upper_body_pos: 0.2    # 放宽4倍（原0.05）
+    teleop_lower_body_pos: 0.5    # 放宽3倍（原0.15）
+    teleop_vr_3point_pos: 0.3     # 放宽6倍（原0.05）
+    teleop_feet_pos: 0.15          # 放宽4倍（原0.05）- 脚部位置稍严格
+    teleop_body_rot: 1.0          # 放宽2倍（原1.5）
+    teleop_body_vel: 0.2          # 降低（原1.5）- 速度应该接近0，要求更严
+    teleop_body_ang_vel: 0.2      # 降低（原1.5）- 角速度应该接近0，要求更严
+    teleop_joint_pos: 3.0         # 放宽2倍（原1.5）- 关节角度允许更大偏差
+    teleop_joint_vel: 0.5         # 降低（原1.5）- 关节速度应该接近0
+
+  # Reward Penalty Curriculum (课程学习)
+  reward_penalty_curriculum: True
+  reward_initial_penalty_scale: 0.1
+  reward_min_penalty_scale: 0.0
+  reward_max_penalty_scale: 1.0
+  reward_penalty_level_down_threshold: 40
+  reward_penalty_level_up_threshold: 42
+  reward_penalty_degree: 0.00001
+  num_compute_average_epl: 10000
+  
+  reward_penalty_reward_names: [
+    "penalty_torques",
+    "penalty_dof_acc",
+    "penalty_dof_vel",
+    "penalty_action_rate",
+    "limits_dof_pos",
+    "limits_dof_vel",
+    "limits_torque",
+    "feet_heading_alignment",
+    "penalty_feet_ori",
+    "penalty_slippage"]
+
+  # Reward Limits
+  reward_limit:
+    soft_dof_pos_limit: 0.9
+    soft_dof_vel_limit: 0.9
+    soft_torque_limit: 0.825
+
+    reward_limits_curriculum:
+      soft_dof_pos_curriculum: True
+      soft_dof_pos_initial_limit: 1.15
+      soft_dof_pos_max_limit: 1.15
+      soft_dof_pos_min_limit: 0.95
+      soft_dof_pos_curriculum_degree: 0.00000025
+      soft_dof_pos_curriculum_level_down_threshold: 40
+      soft_dof_pos_curriculum_level_up_threshold: 42
+
+      soft_dof_vel_curriculum: True
+      soft_dof_vel_initial_limit: 1.15
+      soft_dof_vel_max_limit: 1.25
+      soft_dof_vel_min_limit: 0.95
+      soft_dof_vel_curriculum_degree: 0.00000025
+      soft_dof_vel_curriculum_level_down_threshold: 40
+      soft_dof_vel_curriculum_level_up_threshold: 42
+
+      soft_torque_curriculum: True
+      soft_torque_initial_limit: 1.15
+      soft_torque_max_limit: 1.25
+      soft_torque_min_limit: 0.85
+      soft_torque_curriculum_degree: 0.00000025
+      soft_torque_curriculum_level_down_threshold: 40
+      soft_torque_curriculum_level_up_threshold: 42
+
+  # ============ 模仿奖励（大幅增加正奖励）============
+  reward_scales:
+    # 关节位置跟踪 - 最核心的奖励
+    teleop_joint_position: 8.0  # 大幅增加（原0.75 -> 1.5 -> 5.0）
+    
+    # 身体位置跟踪 - 主要关注整体姿态和脚的位置
+    teleop_body_position_extend: 4.0  # 大幅增加（原1.0 -> 1.5 -> 4.0）
+    teleop_body_position_feet: 12.0    # 超大幅增加（原2.1 -> 3.0 -> 8.0），脚部位置最重要
+    
+    # 旋转跟踪 - 保持直立至关重要
+    teleop_body_rotation_extend: 6.0  # 大幅增加（原0.5 -> 1.0 -> 3.0）
+    
+    # 速度跟踪 - 站立时速度必须接近0
+    teleop_body_velocity_extend: 3.0  # 大幅增加（原0.5 -> 0.8 -> 2.0）
+    teleop_body_ang_velocity_extend: 3.0  # 大幅增加（原0.5 -> 0.8 -> 2.0）
+    teleop_joint_velocity: 2.0        # 增加（原0.5 -> 0.8 -> 1.5）
+    
+    # VR 3点跟踪（头、双手） - 站立时相对不重要
+    teleop_vr_3point: 0.3  # 进一步降低（原1.6 -> 0.5 -> 0.3）
+    
+    # ============ 惩罚项（大幅降低，避免阻碍学习）============
+    # 动作平滑度 - 站立需要持续微调
+    penalty_action_rate: -0.1  # 超低（原-0.5 -> -0.1 -> -0.01）
+    
+    # 扭矩惩罚 - 站立需要持续力量维持
+    penalty_torques: -0.0000001  # 极低（原-1e-06 -> -5e-07 -> -1e-07）
+    
+    # 脚部相关 - 不应该过度限制
+    penalty_feet_ori: -0.1     # 大幅降低（原-2.0 -> -0.5 -> -0.1）
+    feet_heading_alignment: -0.01  # 极低（原-0.1 -> -0.05 -> -0.01）
+    penalty_slippage: -0.1     # 大幅降低（原-1.0 -> -0.3 -> -0.1）
+    
+    # 限制惩罚 - 仅在严重违反时惩罚
+    limits_dof_pos: -2.0   # 大幅降低（原-10.0 -> -5.0 -> -2.0）
+    limits_dof_vel: -1.0   # 大幅降低（原-5.0 -> -2.0 -> -1.0）
+    limits_torque: -1.0    # 大幅降低（原-5.0 -> -2.0 -> -1.0）
+    
+    # 终止惩罚 - 进一步降低
+    termination: -200.0     # 降低（原-200.0 -> -100.0 -> -50.0）
+

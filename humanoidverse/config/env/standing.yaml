@@ -1,0 +1,37 @@
+# @package _global_
+
+defaults:
+  - legged_base
+
+# Env structure
+env:
+  _target_: humanoidverse.envs.standing.standing.LeggedRobotStanding
+  config:
+    max_episode_length_s: 20
+    
+    # Standing specific config
+    standing_command_resampling_time: 100.0  # 长时间不变，保持站立
+    target_base_height: 0.78  # 目标身高（米）
+    target_feet_distance: 0.30  # 目标双脚距离（米）
+
+    termination:
+      terminate_by_contact: False
+      terminate_by_gravity: True  # 倒地时终止
+      terminate_by_low_height: True  # 高度过低时终止
+      terminate_by_high_tilt: True  # 倾斜过大时终止
+
+    termination_scales:
+      termination_min_base_height: 0.50  # 最低身高阈值
+      termination_max_base_height: 1.20  # 最高身高阈值
+      termination_gravity_x: 0.7  # x方向重力分量阈值
+      termination_gravity_y: 0.7  # y方向重力分量阈值
+      termination_max_base_tilt: 0.5  # 最大倾斜角度（弧度，约28度）
+
+# Globally accessible parameters
+log_task_name: standing
+
+eval_overrides:
+  env:
+    config: 
+      max_episode_length_s: 100000
+

@@ -151,6 +151,11 @@ class LeggedRobotMotionTracking(LeggedRobotBase):
         self.motion_ids = torch.arange(self.num_envs).to(self.device)
         self.motion_start_times = torch.zeros(self.num_envs, dtype=torch.float32, device=self.device, requires_grad=False)
         self.motion_len = torch.zeros(self.num_envs, dtype=torch.float32, device=self.device, requires_grad=False)
+        # Forward-progress tracking buffers
+        self.prev_forward_error = torch.zeros(self.num_envs, dtype=torch.float, device=self.device, requires_grad=False)
+        self.ref_root_pos = torch.zeros(self.num_envs, 3, dtype=torch.float, device=self.device, requires_grad=False)
+        # Reference heading quaternion (xyzw) for yaw alignment
+        self.ref_root_heading_quat = torch.zeros(self.num_envs, 4, dtype=torch.float, device=self.device, requires_grad=False)
         
     def _init_domain_rand_buffers(self):
         super()._init_domain_rand_buffers()
@@ -164,6 +169,8 @@ class LeggedRobotMotionTracking(LeggedRobotBase):
         self._resample_motion_times(env_ids) # need to resample before reset root states
         if self.config.termination.terminate_when_motion_far and self.config.termination_curriculum.terminate_when_motion_far_curriculum:
             self._update_terminate_when_motion_far_curriculum()
+        # Reset forward-progress memory for the selected envs
+        self.prev_forward_error[env_ids] = 0.0
     
     def _update_terminate_when_motion_far_curriculum(self):
         assert self.config.termination.terminate_when_motion_far and self.config.termination_curriculum.terminate_when_motion_far_curriculum
@@ -239,6 +246,11 @@ class LeggedRobotMotionTracking(LeggedRobotBase):
 
         ref_body_pos_extend = motion_res["rg_pos_t"]
         self.ref_body_pos_extend[:] = ref_body_pos_extend # for visualization and analysis
+        if 'root_pos' in motion_res:
+            self.ref_root_pos[:] = motion_res['root_pos']
+        if 'root_rot' in motion_res:
+            # Store reference heading-only quaternion (xyzw)
+            self.ref_root_heading_quat[:] = calc_heading_quat(motion_res['root_rot'], w_last=True)
         ref_body_vel_extend = motion_res["body_vel_t"] # [num_envs, num_markers, 3]
         self.ref_body_rot_extend = ref_body_rot_extend = motion_res["rg_rot_t"] # [num_envs, num_markers, 4]
         ref_body_ang_vel_extend = motion_res["body_ang_vel_t"] # [num_envs, num_markers, 3]
@@ -610,7 +622,11 @@ class LeggedRobotMotionTracking(LeggedRobotBase):
     
     def _reward_teleop_body_rotation_extend(self):
         rotation_diff = quat_to_angle_axis(self.dif_global_body_rot)[0]
+        # First reduce over angle-axis components
         diff_body_rot_dist = (rotation_diff**2).mean(dim=-1)
+        # If there is a markers dimension remaining, reduce it; otherwise keep [num_envs]
+        if diff_body_rot_dist.ndim == 2:
+            diff_body_rot_dist = diff_body_rot_dist.mean(dim=-1)
         r_body_rot = torch.exp(-diff_body_rot_dist / self.config.rewards.reward_tracking_sigma.teleop_body_rot)
         return r_body_rot
 
@@ -637,6 +653,252 @@ class LeggedRobotMotionTracking(LeggedRobotBase):
         diff_joint_vel_dist = (joint_vel_diff**2).mean(dim=-1)
         r_joint_vel = torch.exp(-diff_joint_vel_dist / self.config.rewards.reward_tracking_sigma.teleop_joint_vel)
         return r_joint_vel
+    
+    ######################### Gait Phase Rewards #########################
+    def _reward_gait_phase_contact(self):
+        """
+        奖励在正确的相位窗口内有正确的接触状态
+        stance窗口内应该接触，swing窗口内应该不接触
+        """
+        # 获取左右脚相位（左右脚相差半个周期）
+        phase_left = self._ref_motion_phase.squeeze(1)  # [num_envs]
+        phase_right = (phase_left + 0.5) % 1.0  # 右脚相位偏移0.5
+        
+        # 判断是否在stance窗口（0.0~0.55）
+        is_stance_left = (phase_left < 0.55).float()
+        is_stance_right = (phase_right < 0.55).float()
+        
+        # 获取接触状态（contact force > 1N）
+        contact_left = (self.simulator.contact_forces[:, self.feet_indices[0], 2] > 1.0).float()
+        contact_right = (self.simulator.contact_forces[:, self.feet_indices[1], 2] > 1.0).float()
+        
+        # 计算相位匹配奖励（contact和stance状态一致时为1）
+        # XOR逻辑：如果contact=is_stance，则奖励为1；否则为0
+        match_left = 1.0 - torch.abs(contact_left - is_stance_left)
+        match_right = 1.0 - torch.abs(contact_right - is_stance_right)
+        
+        # 两只脚的平均匹配度
+        reward = (match_left + match_right) / 2.0
+        return reward
+    
+    def _reward_gait_phase_swing_clearance(self):
+        """
+        奖励在swing窗口内脚离地（强制抬脚）
+        """
+        # 获取左右脚相位
+        phase_left = self._ref_motion_phase.squeeze(1)
+        phase_right = (phase_left + 0.5) % 1.0
+        
+        # 判断是否在swing窗口（0.55~1.0）
+        is_swing_left = (phase_left >= 0.55).float()
+        is_swing_right = (phase_right >= 0.55).float()
+        
+        # 获取接触状态
+        contact_left = (self.simulator.contact_forces[:, self.feet_indices[0], 2] > 1.0).float()
+        contact_right = (self.simulator.contact_forces[:, self.feet_indices[1], 2] > 1.0).float()
+        
+        # 获取脚的高度（相对于地面，基础高度）
+        # 假设机器人base在0.7m左右，脚应该在0-0.2m之间
+        foot_height_left = self.simulator._rigid_body_pos[:, self.feet_indices[0], 2]
+        foot_height_right = self.simulator._rigid_body_pos[:, self.feet_indices[1], 2]
+        
+        # 获取当前base高度作为参考
+        base_height = self.simulator.robot_root_states[:, 2]
+        
+        # 脚相对于地面的"抬起高度"（简化：绝对高度 - 最低高度估计）
+        # 这里假设地面在base_height - 0.65m左右（根据机器人腿长）
+        ground_estimate = base_height - 0.65
+        lift_height_left = torch.clamp(foot_height_left - ground_estimate, min=0.0, max=0.3)
+        lift_height_right = torch.clamp(foot_height_right - ground_estimate, min=0.0, max=0.3)
+        
+        # Swing阶段奖励：只要离地就给奖励（不要求特定高度）
+        # 如果未接触 且 在swing窗口，奖励幅度与抬脚高度正相关
+        reward_left = is_swing_left * (1.0 - contact_left) * torch.clamp(lift_height_left * 10.0, 0.0, 1.0)
+        reward_right = is_swing_right * (1.0 - contact_right) * torch.clamp(lift_height_right * 10.0, 0.0, 1.0)
+        
+        # 两只脚的平均
+        reward = (reward_left + reward_right) / 2.0
+        return reward
+    
+    def _reward_gait_phase_mismatch(self):
+        """
+        惩罚相位不匹配：swing窗口内接触或stance窗口内不接触
+        重点惩罚：swing时还在接触地面（强制抬脚）
+        """
+        # 获取左右脚相位
+        phase_left = self._ref_motion_phase.squeeze(1)
+        phase_right = (phase_left + 0.5) % 1.0
+        
+        # 判断窗口
+        is_swing_left = (phase_left >= 0.55).float()
+        is_swing_right = (phase_right >= 0.55).float()
+        is_stance_left = 1.0 - is_swing_left
+        is_stance_right = 1.0 - is_swing_right
+        
+        # 获取接触状态
+        contact_left = (self.simulator.contact_forces[:, self.feet_indices[0], 2] > 1.0).float()
+        contact_right = (self.simulator.contact_forces[:, self.feet_indices[1], 2] > 1.0).float()
+        
+        # 计算不匹配惩罚
+        # swing时接触：重惩罚（系数2.0）- 强制它抬脚！
+        # stance时不接触：轻惩罚（系数0.5）- 允许一定灵活性
+        mismatch_left = 2.0 * is_swing_left * contact_left + 0.5 * is_stance_left * (1.0 - contact_left)
+        mismatch_right = 2.0 * is_swing_right * contact_right + 0.5 * is_stance_right * (1.0 - contact_right)
+        
+        # 返回惩罚（平均）
+        penalty = (mismatch_left + mismatch_right) / 2.0
+        return penalty
+    
+    def _reward_feet_distance_tracking(self):
+        """
+        奖励脚间距匹配参考动作
+        目的：避免"小碎步"（脚间距太小）或"劈叉"（脚间距太大）
+        """
+        # 获取当前两脚的3D位置
+        foot_pos_left = self.simulator._rigid_body_pos[:, self.feet_indices[0], :]   # [N, 3]
+        foot_pos_right = self.simulator._rigid_body_pos[:, self.feet_indices[1], :]  # [N, 3]
+        
+        # 计算当前脚间距（只看水平距离，忽略高度差）
+        feet_diff_horizontal = foot_pos_left[:, :2] - foot_pos_right[:, :2]  # [N, 2] (x, y)
+        current_feet_distance = torch.norm(feet_diff_horizontal, dim=-1)  # [N]
+        
+        # 从参考动作获取期望的脚间距
+        # dif_global_body_pos 包含了参考动作和当前动作的差异
+        # self.ref_body_pos_extend[:, self.feet_indices, :] 是参考脚位置
+        ref_foot_pos_left = self.ref_body_pos_extend[:, self.feet_indices[0], :]   # [N, 3]
+        ref_foot_pos_right = self.ref_body_pos_extend[:, self.feet_indices[1], :]  # [N, 3]
+        
+        ref_feet_diff_horizontal = ref_foot_pos_left[:, :2] - ref_foot_pos_right[:, :2]
+        ref_feet_distance = torch.norm(ref_feet_diff_horizontal, dim=-1)  # [N]
+        
+        # 计算距离误差
+        distance_error = torch.abs(current_feet_distance - ref_feet_distance)
+        
+        # 使用指数奖励函数，距离匹配越好奖励越高
+        # sigma控制容忍度，越小要求越精确
+        sigma = self.config.rewards.reward_tracking_sigma.get('feet_distance', 0.1)  # 默认0.1m容忍
+        reward = torch.exp(-distance_error / sigma)
+        
+        return reward
+    
+    def _reward_feet_forward_distance(self):
+        """
+        奖励前后脚距离（stride）匹配参考动作
+        目的：直接控制"步幅"，避免小碎步
+        """
+        # 获取两脚在前进方向（x轴）的距离
+        foot_pos_left = self.simulator._rigid_body_pos[:, self.feet_indices[0], :]   # [N, 3]
+        foot_pos_right = self.simulator._rigid_body_pos[:, self.feet_indices[1], :]  # [N, 3]
+        
+        # 前后脚距离（x方向的差值绝对值）
+        current_forward_distance = torch.abs(foot_pos_left[:, 0] - foot_pos_right[:, 0])
+        
+        # 参考动作的前后脚距离
+        ref_foot_pos_left = self.ref_body_pos_extend[:, self.feet_indices[0], :]
+        ref_foot_pos_right = self.ref_body_pos_extend[:, self.feet_indices[1], :]
+        ref_forward_distance = torch.abs(ref_foot_pos_left[:, 0] - ref_foot_pos_right[:, 0])
+        
+        # 计算误差
+        distance_error = torch.abs(current_forward_distance - ref_forward_distance)
+        
+        # 指数奖励
+        sigma = self.config.rewards.reward_tracking_sigma.get('feet_forward_distance', 0.15)
+        reward = torch.exp(-distance_error / sigma)
+        
+        return reward
+    
+    def _reward_feet_lateral_distance(self):
+        """
+        奖励左右脚横向距离（stance width）匹配参考动作
+        目的：控制"步宽"，避免脚靠太近或太宽（劈叉）
+        """
+        # 获取两脚在横向（y轴）的距离
+        foot_pos_left = self.simulator._rigid_body_pos[:, self.feet_indices[0], :]   # [N, 3]
+        foot_pos_right = self.simulator._rigid_body_pos[:, self.feet_indices[1], :]  # [N, 3]
+        
+        # 横向距离（y方向的差值绝对值）
+        current_lateral_distance = torch.abs(foot_pos_left[:, 1] - foot_pos_right[:, 1])
+        
+        # 参考动作的横向距离
+        ref_foot_pos_left = self.ref_body_pos_extend[:, self.feet_indices[0], :]
+        ref_foot_pos_right = self.ref_body_pos_extend[:, self.feet_indices[1], :]
+        ref_lateral_distance = torch.abs(ref_foot_pos_left[:, 1] - ref_foot_pos_right[:, 1])
+        
+        # 计算误差
+        distance_error = torch.abs(current_lateral_distance - ref_lateral_distance)
+        
+        # 指数奖励
+        sigma = self.config.rewards.reward_tracking_sigma.get('feet_lateral_distance', 0.08)
+        reward = torch.exp(-distance_error / sigma)
+        
+        return reward
+
+    def _reward_upright(self):
+        """
+        姿态直立奖励：根据投影重力与机体 z 轴的夹角（倾角）给奖励。
+        - self.projected_gravity 是把世界重力旋到机体坐标后的向量，理想直立时约为 [0, 0, -g]。
+        - 使用 tilt_angle = atan2(||g_xy||, |g_z|)，角度越小越直立。
+        """
+        g = self.projected_gravity  # [N, 3]
+        g_xy = torch.norm(g[:, :2], dim=-1)
+        g_z = torch.abs(g[:, 2]) + 1e-6
+        tilt_angle = torch.atan2(g_xy, g_z)  # radians
+        sigma = self.config.rewards.reward_tracking_sigma.get('upright_angle', 0.10)
+        reward = torch.exp(-(tilt_angle * tilt_angle) / sigma)
+        return reward
+
+    def _reward_heading_alignment(self):
+        """
+        朝向对齐奖励：对齐当前根部 yaw 与参考 yaw（仅考虑平面朝向）。
+        使用 heading-only 四元数计算相对旋转，再用角轴向量的幅值作为误差。
+        """
+        # Current heading quaternion (xyzw)
+        curr_heading = calc_heading_quat(self.simulator.robot_root_states[:, 3:7].clone(), w_last=True)
+        # Reference heading quaternion (xyzw) prepared in pre-compute
+        ref_heading = self.ref_root_heading_quat
+
+        # Relative rotation delta = ref * conj(curr)
+        delta = quat_mul(ref_heading, quat_conjugate(curr_heading, w_last=True), w_last=True)
+        # Convert to angle-axis: quat_to_angle_axis returns (angle [N], axis [N,3])
+        angle, axis = quat_to_angle_axis(delta)
+        # Use angle squared as yaw error (angle is scalar rotation magnitude)
+        yaw_err_sq = angle * angle  # [N]
+
+        sigma = self.config.rewards.reward_tracking_sigma.get('heading_angle', 0.12)
+        reward = torch.exp(-yaw_err_sq / sigma)
+        return reward
+
+    def _reward_forward_progress(self):
+        """
+        奖励朝向参考根部位置的前向进度：
+        - 基于世界 x 方向（参考行走数据通常沿 +x）。
+        - 使用形状函数进度：exp(-err/sigma) 的提升量作为奖励，避免在目标附近停住。
+        - 首次达到阈值时给予一次性小额 bonus。
+        """
+        # 若参考根部位置不可用，返回零奖励
+        if self.ref_root_pos is None:
+            return torch.zeros(self.num_envs, dtype=torch.float, device=self.device)
+
+        # 当前与参考在 x 方向的绝对误差
+        curr_root_x = self.simulator.robot_root_states[:, 0]
+        ref_root_x = self.ref_root_pos[:, 0]
+        curr_err = torch.abs(curr_root_x - ref_root_x)
+
+        sigma = self.config.rewards.reward_tracking_sigma.get('forward_progress_x', 0.25)
+        # 当前得分与上一步得分的提升量（只取正）
+        curr_score = torch.exp(-curr_err / sigma)
+        prev_score = torch.exp(-self.prev_forward_error / sigma)
+        reward = torch.clamp(curr_score - prev_score, min=0.0)
+
+        # 通过阈值的到达奖励（单次）
+        arrive_th = getattr(self.config.rewards, 'forward_progress_arrival_threshold', 0.08)
+        arrive_bonus = getattr(self.config.rewards, 'forward_progress_arrival_bonus', 0.5)
+        crossed = (curr_err < arrive_th) & (self.prev_forward_error >= arrive_th)
+        reward = reward + crossed.float() * arrive_bonus
+
+        # 更新历史误差
+        self.prev_forward_error = curr_err.detach()
+        return reward
     
     def setup_visualize_entities(self):
         if self.debug_viz and self.config.simulator.config.name == "genesis":

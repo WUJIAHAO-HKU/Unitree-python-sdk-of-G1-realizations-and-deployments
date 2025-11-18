@@ -1,0 +1,156 @@
+# @package _global_
+# 为走路动作优化的Motion Tracking奖励配置
+# 相比站立配置，鼓励动态运动和连续动作
+
+rewards:
+  set_reward: Motion_Tracking_Walking_Optimized
+  set_reward_date: 20251023
+  only_positive_rewards: False
+
+  # Body position weights
+  teleop_body_pos_lowerbody_weight: 1.0  # 增加下半身权重（站立是0.5）
+  teleop_body_pos_upperbody_weight: 0.8  # 降低上半身权重（站立是1.0）
+
+  # Tracking sigma parameters（优化后策略 - 平衡精确度和步态自然性）
+  # sigma越小，要求越精确；sigma越大，容忍偏差越大
+  reward_tracking_sigma:
+    # 速度相关 - 大幅放宽，鼓励快速大幅度运动（关键调整！）
+    teleop_body_vel: 0.9          # 放宽
+    teleop_body_ang_vel: 0.8      # 放宽
+    teleop_joint_vel: 1.0         # 大幅放宽！允许快速运动
+    
+    # 位置相关 - 根据优先级调整
+    teleop_upper_body_pos: 0.08    # 保持
+    teleop_lower_body_pos: 0.10    # 保持
+    teleop_vr_3point_pos: 0.15     # 保持
+    teleop_feet_pos: 0.15          # 放宽！允许大步幅（关键调整1）
+    
+    # 旋转跟踪 - 保持
+    teleop_body_rot: 1.5           # 保持
+    
+    # 关节位置 - 放宽！允许大幅度摆动（关键调整2）
+    teleop_joint_pos: 1.0          # 放宽，鼓励自然步态
+    
+    # ========== 新增：脚间距控制sigma（放宽，更容易拿分）==========
+    feet_distance: 0.15            # 整体脚间距容忍度（3D距离）- 放宽
+    feet_forward_distance: 0.20    # 前后脚距离（步幅）容忍度 - 放宽！让步幅容易拿分
+    feet_lateral_distance: 0.12    # 左右脚距离（步宽）容忍度 - 放宽
+    # 新增：前向进度跟踪（根部 x 与参考 x 的距离）
+    forward_progress_x: 0.25
+    # 直立姿态角度（弧度^2 的指数项），越小越严格
+    upright_angle: 0.07
+    # 新增：朝向对齐角度（仅考虑 yaw），收敛更稳
+    heading_angle: 0.12
+
+  # Reward Penalty Curriculum (课程学习) - 走路需要更渐进的学习
+  reward_penalty_curriculum: True
+  reward_initial_penalty_scale: 0.05  # 更低的初始惩罚（站立0.1）
+  reward_min_penalty_scale: 0.0
+  reward_max_penalty_scale: 1.0
+  reward_penalty_level_down_threshold: 100  # 更宽松的阈值（站立40）
+  reward_penalty_level_up_threshold: 300    # 更宽松的阈值（站立42）
+  reward_penalty_degree: 0.000005           # 更慢的变化速度（站立0.00001）
+  num_compute_average_epl: 10000
+  
+  reward_penalty_reward_names: [
+    "penalty_torques",
+    "penalty_dof_acc",
+    "penalty_action_rate",
+    "limits_dof_pos",
+    "limits_dof_vel",
+    "limits_torque"]
+    # 注意：移除了脚部相关惩罚，走路需要脚部灵活运动
+
+  # Reward Limits - 走路需要更大的活动范围
+  reward_limit:
+    soft_dof_pos_limit: 0.95
+    soft_dof_vel_limit: 0.95
+    soft_torque_limit: 0.90  # 比站立稍宽松（站立0.825）
+
+    reward_limits_curriculum:
+      soft_dof_pos_curriculum: True
+      soft_dof_pos_initial_limit: 1.20  # 比站立稍宽松（站立1.15）
+      soft_dof_pos_max_limit: 1.20
+      soft_dof_pos_min_limit: 0.95
+      soft_dof_pos_curriculum_degree: 0.00000015  # 更慢变化
+      soft_dof_pos_curriculum_level_down_threshold: 100
+      soft_dof_pos_curriculum_level_up_threshold: 300
+
+      soft_dof_vel_curriculum: True
+      soft_dof_vel_initial_limit: 1.25  # 比站立宽松（站立1.15）
+      soft_dof_vel_max_limit: 1.30
+      soft_dof_vel_min_limit: 0.95
+      soft_dof_vel_curriculum_degree: 0.00000015
+      soft_dof_vel_curriculum_level_down_threshold: 100
+      soft_dof_vel_curriculum_level_up_threshold: 300
+
+      soft_torque_curriculum: True
+      soft_torque_initial_limit: 1.20  # 比站立宽松（站立1.15）
+      soft_torque_max_limit: 1.30
+      soft_torque_min_limit: 0.85
+      soft_torque_curriculum_degree: 0.00000015
+      soft_torque_curriculum_level_down_threshold: 100
+      soft_torque_curriculum_level_up_threshold: 300
+
+  # ============ 模仿奖励（步幅优先策略 - 激进调整）============
+  reward_scales:
+    # ========== 最高优先级：步幅控制（压倒性权重）==========
+    
+    feet_forward_distance: 55.0         # 降低以提升稳定性，避免过度跨步
+    feet_lateral_distance: 28.0          # 降低以减少横向摆动
+    feet_distance_tracking: 22.0         # 适度降低，减小激进步态
+    
+    # ========== 中等优先级：速度跟踪 ==========
+    
+    teleop_joint_velocity: 40          # 保持！速度匹配确保动态连贯
+    teleop_body_velocity_extend: 35    # 保持！身体速度匹配
+    
+    # ========== 较低优先级：位置跟踪（降低，让位给步幅）==========
+    
+    teleop_joint_position: 40.0          # 降低！从60降到40
+    teleop_body_position_feet: 35.0      # 降低！从60降到35
+    teleop_body_position_extend: 30.0    # 降低！从50降到30
+    
+    # ========== 辅助优先级：旋转和其他 ==========
+    
+    teleop_body_rotation_extend: 28.0    # 提高，增强整体姿态/朝向约束
+    teleop_body_ang_velocity_extend: 16.0  # 提高，抑制无效旋转
+    teleop_vr_3point: 2.0                # 保持
+    # 新增：前向进度奖励（避免“差一点就不追”）
+    forward_progress: 25.0
+    # 新增：直立奖励，抑制身体侧倾
+    upright: 35.0
+    # 新增：朝向对齐奖励（根部 yaw 对齐参考朝向/行进方向）
+    heading_alignment: 25.0
+    
+    # ============ 相位奖励（辅助性 - 如果精确跟随，这些会自然满足）============
+    gait_phase_contact: 3.0              # 降低，让位给精确跟踪
+    gait_phase_swing_clearance: 5.0      # 降低，辅助性质
+    gait_phase_mismatch: -3.0            # 降低，辅助性质
+    
+    # ============ 惩罚项（适度，保证稳定性）============
+    # 动作平滑度 - 适度惩罚，避免抖动
+    penalty_action_rate: -0.05   # 提高平滑度约束，减少抖动
+    
+    # 扭矩惩罚 - 极低，不影响学习
+    penalty_torques: -0.0000005  # 极低
+    
+    # 加速度惩罚 - 适度，避免剧烈运动
+    penalty_dof_acc: -0.00002   # 提高，抑制瞬时爆发
+    
+    # 限制惩罚 - 保持
+    limits_dof_pos: -2.0    # 稍微提高，避免超限
+    limits_dof_vel: -1.0    # 稍微提高
+    limits_torque: -1.0     # 稍微提高
+    
+    # 终止惩罚 - 提高，强烈避免摔倒
+    termination: -200.0     # 提高！一定不能摔
+
+  # ============ 走路特定参数 ============
+  # 这些参数在走路时可能会用到
+  locomotion_max_contact_force: 220.0  # 略降，缓和冲击提升稳定性
+  desired_feet_max_height_for_this_air: 0.15  # 期望的抬脚高度
+  # 前向进度到达判定与一次性 bonus（缩放前）
+  forward_progress_arrival_threshold: 0.08
+  forward_progress_arrival_bonus: 0.5
+

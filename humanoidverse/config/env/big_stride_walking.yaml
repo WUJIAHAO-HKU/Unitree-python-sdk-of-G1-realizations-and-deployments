@@ -1,0 +1,40 @@
+# @package _global_
+
+defaults:
+  - legged_base
+
+# Env structure
+env:
+  _target_: humanoidverse.envs.big_stride_walking.big_stride_walking.BigStrideWalking
+  config:
+    max_episode_length_s: 20
+    
+    # 目标前进速度 (m/s) - 慢走（降低以匹配慢节奏）
+    target_forward_velocity: 0.4
+    
+    # 目标步频 (Hz) - 慢走节奏
+    target_cadence: 0.667  # 0.667步/秒 = 1.5秒/步
+    
+    # 终止条件（启用方向约束，防止走斜线）
+    termination:
+      terminate_by_contact: False
+      terminate_by_gravity: True            # 倾倒终止
+      terminate_by_low_height: True         # 过低终止（摔倒）
+      terminate_by_heading_deviation: True  # 🔥 启用！防止走斜线
+      terminate_by_lateral_deviation: True  # 🔥 启用！防止侧向偏移
+
+    termination_scales:
+      termination_min_base_height: 0.25     # 允许较低姿态
+      termination_gravity_x: 0.5            # 允许一定倾斜
+      termination_gravity_y: 0.5            # 允许侧倾
+      max_heading_deviation: 0.524          # 🔥 30度（π/6），严格直线
+      max_lateral_deviation: 1.0            # 🔥 1m侧向偏移限制
+
+# Globally accessible parameters
+log_task_name: big_stride_walking
+
+eval_overrides:
+  env:
+    config: 
+      max_episode_length_s: 100000
+

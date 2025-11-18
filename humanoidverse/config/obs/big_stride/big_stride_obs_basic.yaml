@@ -1,0 +1,81 @@
+# @package _global_
+# 大步行走观测配置 - 不需要参考轨迹或命令
+
+obs:
+  obs_dict:
+    actor_obs: [
+      base_ang_vel,
+      projected_gravity,
+      dof_pos,
+      dof_vel,
+      actions,
+      gait_phase,
+      short_history
+    ]
+
+    critic_obs: [
+      base_lin_vel,
+      base_ang_vel,
+      projected_gravity,
+      dof_pos,
+      dof_vel,
+      actions,
+      gait_phase,
+      short_history
+    ]
+
+  # 定义历史观测
+  obs_auxiliary: 
+    short_history: {
+      base_ang_vel: 4,
+      projected_gravity: 4,
+      dof_pos: 4,
+      dof_vel: 4,
+      actions: 4,
+      gait_phase: 4,
+    }
+
+  obs_scales: {
+    base_lin_vel: 2.0,
+    base_ang_vel: 0.25,
+    projected_gravity: 1.0,
+    dof_pos: 1.0,
+    dof_vel: 0.05,
+    history: 1.0,
+    short_history: 1.0,
+    actions: 1.0,
+    gait_phase: 1.0,
+  }
+
+  noise_scales: {
+    base_lin_vel: 0.1,
+    base_ang_vel: 0.2,
+    projected_gravity: 0.05,
+    dof_pos: 0.01,
+    dof_vel: 1.5,
+    actions: 0.0,
+    history: 0.0,
+    short_history: 0.0,
+    gait_phase: 0.0,
+  }
+
+  # 噪声课程学习配置
+  add_noise_currculum: False
+  noise_initial_value: 0.05
+  noise_value_max: 1.0
+  noise_value_min: 0.00001
+  soft_dof_pos_curriculum_degree: 0.00001
+  soft_dof_pos_curriculum_level_down_threshold: 80
+  soft_dof_pos_curriculum_level_up_threshold: 120
+
+  # obs_dims should use list instead of dict
+  # will be converted to dict in `pre_process_config`
+  obs_dims:
+    - base_lin_vel: 3
+    - base_ang_vel: 3
+    - projected_gravity: 3
+    - dof_pos: ${robot.dof_obs_size}
+    - dof_vel: ${robot.dof_obs_size}
+    - actions: ${robot.dof_obs_size}
+    - gait_phase: 2  # sin(phase), cos(phase)
+

@@ -1,0 +1,73 @@
+# @package _global_
+
+obs:
+  add_noise_currculum: False
+  noise_initial_value: 1.0
+  noise_min_value: 1.0
+  noise_max_value: 1.0
+  noise_curriculum_degree: 0.0000025
+  noise_curriculum_level_down_threshold: 40
+  noise_curriculum_level_up_threshold: 42
+
+  obs_dict:
+    actor_obs:
+      # ========== 本体感知（关节状态） ==========
+      - dof_pos                   # 关节位置
+      - dof_vel                   # 关节速度
+      - actions                   # 上一步动作
+      
+      # ========== IMU感知（姿态和速度） ==========
+      - base_lin_vel              # 基座线速度（局部坐标系）
+      - base_ang_vel              # 基座角速度（局部坐标系）
+      - projected_gravity         # 投影重力（感知倾斜）
+      
+      # ========== 任务相关观测 ==========
+      - standing_target_height    # 目标高度
+      - feet_distance             # 当前双脚距离
+      
+    critic_obs:
+      # Critic使用与Actor相同的观测
+      - dof_pos
+      - dof_vel
+      - actions
+      - base_lin_vel
+      - base_ang_vel
+      - projected_gravity
+      - standing_target_height
+      - feet_distance
+
+  obs_dims:
+    - dof_pos: ${robot.dof_obs_size}              # 23
+    - dof_vel: ${robot.dof_obs_size}              # 23
+    - actions: ${robot.actions_dim}               # 23
+    - base_lin_vel: 3                             # 3
+    - base_ang_vel: 3                             # 3
+    - projected_gravity: 3                        # 3
+    - standing_target_height: 1                   # 1
+    - feet_distance: 1                            # 1
+
+  obs_scales:
+    dof_pos: 1.0
+    dof_vel: 0.05
+    actions: 1.0
+    base_lin_vel: 2.0
+    base_ang_vel: 0.25
+    projected_gravity: 1.0
+    standing_target_height: 1.0
+    feet_distance: 1.0
+
+  noise_scales:
+    dof_pos: 0.01
+    dof_vel: 1.5
+    actions: 0.0
+    base_lin_vel: 0.1
+    base_ang_vel: 0.2
+    projected_gravity: 0.05
+    standing_target_height: 0.0
+    feet_distance: 0.01
+
+  obs_auxiliary: {}
+
+  use_phase: False
+  use_history_buffer: False
+

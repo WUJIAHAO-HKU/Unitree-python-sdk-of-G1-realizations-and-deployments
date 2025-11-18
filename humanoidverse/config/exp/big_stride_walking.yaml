@@ -1,0 +1,8 @@
+# @package _global_
+
+defaults:
+  - /algo: ppo
+  - /env: big_stride_walking
+
+experiment_name: BigStrideWalking
+

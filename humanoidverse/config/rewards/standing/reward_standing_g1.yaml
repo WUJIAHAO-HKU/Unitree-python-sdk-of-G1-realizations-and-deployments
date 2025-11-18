@@ -1,0 +1,119 @@
+# @package _global_
+
+rewards:
+  set_reward: Standing_Task
+  set_reward_date: 20251017
+  only_positive_rewards: False
+  
+  reward_scales:
+    # ============ 核心站立奖励 ============
+    standing_upright: 10.0             # 保持直立（最重要）- 大幅增加
+    standing_base_height: 5.0          # 保持目标高度 - 增加
+    standing_feet_placement: 2.0       # 保持双脚合理间距 - 增加
+    standing_base_stability: 2.0       # 保持质心稳定 - 增加
+    standing_zero_velocity: 1.5        # 保持静止（线速度和角速度接近零）- 增加
+    
+    # ============ 姿态优化奖励 ============
+    standing_symmetric_stance: 1.0     # 对称站姿 - 增加
+    standing_joint_default: 0.5        # 关节角度接近默认值 - 增加
+    
+    # ============ 物理约束惩罚 ============
+    penalty_orientation: -2.0          # 惩罚身体倾斜（增大，倒地/大倾角更贵）
+    penalty_lin_vel: -1.0              # 惩罚线速度（增大，鼓励静止）
+    penalty_ang_vel: -1.0              # 惩罚角速度（增大，抑制摇摆）
+    penalty_base_height_deviation: -2.0 # 惩罚高度偏离（增大，防止塌腰/下沉）
+    
+    # ============ 动作平滑惩罚 ============
+    penalty_torques: -0.00002          # 惩罚力矩（更小，因为站立需要持续力矩）
+    penalty_dof_vel: -0.0001           # 惩罚关节速度
+    penalty_dof_acc: -2.5e-7           # 惩罚关节加速度
+    penalty_action_rate: -0.05         # 惩罚动作变化率
+    
+    # ============ 脚部接触惩罚 ============
+    penalty_feet_contact_forces: -0.02 # 惩罚过大接触力（增大）
+    penalty_slippage: -1.0             # 惩罚脚滑（增大）
+    penalty_feet_ori: -1.5             # 惩罚脚部姿态异常（增大）
+    penalty_uneven_feet_contact: -1.2  # 惩罚双脚接触力不均（增大）
+    
+    # ============ 限制惩罚 ============
+    limits_dof_pos: -5.0               # 惩罚关节角度超限 - 减小
+    limits_dof_vel: -2.0               # 惩罚关节速度超限 - 减小
+    limits_torque: -2.0                # 惩罚力矩超限 - 减小
+    
+    # ============ 终止惩罚 ============
+    termination: -50.0                 # 终止时的惩罚 - 大幅减小
+
+  # ============ 站立任务特定参数 ============
+  desired_base_height: 0.78            # 期望身高（米）
+  desired_feet_distance: 0.30          # 期望双脚距离（米）
+  feet_distance_tolerance: 0.10        # 双脚距离容忍度（米）
+  base_height_tolerance: 0.05          # 高度容忍度（米）
+  velocity_tolerance: 0.05             # 速度容忍度（m/s或rad/s）
+  
+  # ============ 高斯奖励函数的sigma参数 ============
+  reward_tracking_sigma:
+    base_height: 0.02                  # 高度跟踪精度
+    feet_distance: 0.05                # 双脚距离跟踪精度
+    orientation: 0.1                   # 姿态跟踪精度
+    velocity: 0.05                     # 速度跟踪精度
+    joint_pos: 0.5                     # 关节位置跟踪精度
+  
+  # ============ 限制参数 ============
+  reward_limit:
+    soft_dof_pos_limit: 0.9
+    soft_dof_vel_limit: 0.9
+    soft_torque_limit: 0.85
+    
+    reward_limits_curriculum:
+      soft_dof_pos_curriculum: False
+      soft_dof_pos_initial_limit: 1.15
+      soft_dof_pos_max_limit: 1.15
+      soft_dof_pos_min_limit: 0.95
+      soft_dof_pos_curriculum_degree: 0.00000025
+      soft_dof_pos_curriculum_level_down_threshold: 40
+      soft_dof_pos_curriculum_level_up_threshold: 42
+
+      soft_dof_vel_curriculum: False
+      soft_dof_vel_initial_limit: 1.15
+      soft_dof_vel_max_limit: 1.25
+      soft_dof_vel_min_limit: 0.95
+      soft_dof_vel_curriculum_degree: 0.00000025
+      soft_dof_vel_curriculum_level_down_threshold: 40
+      soft_dof_vel_curriculum_level_up_threshold: 42
+
+      soft_torque_curriculum: False
+      soft_torque_initial_limit: 1.15
+      soft_torque_max_limit: 1.25
+      soft_torque_min_limit: 0.85
+      soft_torque_curriculum_degree: 0.00000025
+      soft_torque_curriculum_level_down_threshold: 40
+      soft_torque_curriculum_level_up_threshold: 42
+
+  # ============ 课程学习参数 ============
+  reward_penalty_curriculum: False
+  reward_initial_penalty_scale: 1.0
+  reward_min_penalty_scale: 0.0
+  reward_max_penalty_scale: 1.0
+  reward_penalty_level_down_threshold: 400
+  reward_penalty_level_up_threshold: 700
+  reward_penalty_degree: 0.00001
+  num_compute_average_epl: 10000
+
+  reward_penalty_reward_names: [
+    "penalty_orientation",
+    "penalty_lin_vel",
+    "penalty_ang_vel",
+    "penalty_base_height_deviation",
+    "penalty_torques",
+    "penalty_dof_vel",
+    "penalty_dof_acc",
+    "penalty_action_rate",
+    "penalty_feet_contact_forces",
+    "penalty_slippage",
+    "penalty_feet_ori",
+    "penalty_uneven_feet_contact",
+    "limits_dof_pos",
+    "limits_dof_vel",
+    "limits_torque"
+  ]
+
