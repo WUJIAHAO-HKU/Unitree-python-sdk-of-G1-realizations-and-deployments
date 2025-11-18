@@ -1,6 +1,12 @@
-# Unitree G1 Python SDK Full Pipeline
+# ╔═╗┌─┐┌┬┐┬┌┐┌┌─┐┬┬  ┌─┐
+# ║ ║├┤  │ ││││├─┘││  └─┐  **Unitree G1 Full Pipeline**
+# ╚═╝└─┘ ┴ ┴┘└┘┴  ┴┴─┘└─┘
 
-This folder summarizes the end-to-end workflow we verified on the Unitree G1 robot:
+> 🐾 _Train in sim · stand with PD · deploy PPO on the real G1_
+
+> “Let the lightbulbs go on before the robot takes off.”
+
+💡This folder summarizes the end-to-end workflow we verified on the Unitree G1 robot:
 
 1. **Build dependencies** (Cyclone DDS v0.10.x, Unitree SDK2 Python).
 2. **Prepare the Python 3.10 environment** dedicated to the SDK.
@@ -20,7 +26,7 @@ The goal is to make it trivial to replicate the "simulation → real" path and t
 | `humanoidverse/` | Training framework (IsaacGym-based) used to produce the RL policies. |
 | `unitree_g1_pipeline/` | **This** folder with documentation & release assets. |
 
-Important scripts:
+⚙️Important scripts:
 
 - `unitree_sdk2_python/example/g1/low_level/test_dds_connection.py`
 - `unitree_sdk2_python/example/g1/low_level/get_robot_state.py`
@@ -60,7 +66,7 @@ pip install -e unitree_sdk2_python
 
 Follow the existing instructions in `humanoidverse/README`. The most common training command is already wrapped in `train_big_stride.sh`.
 
-## 2. DDS & Robot Bring-up
+🚀## 2. DDS & Robot Bring-up
 
 1. **Connectivity test**
    ```bash
@@ -154,3 +160,4 @@ Topics: unitree, sdk2, g1, robotics, reinforcement-learning, isaacgym, deploymen
 - Provide demo videos / logs inside a `media/` folder in the GitHub repo.
 
 Feel free to adapt this README template when publishing; everything above is safe to copy into the new repository.
+
