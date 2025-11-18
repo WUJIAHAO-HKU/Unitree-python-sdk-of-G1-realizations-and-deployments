@@ -1,4 +1,4 @@
-**Unitree G1 Full Pipeline**
+## **Unitree G1 Full Pipeline**
 
 > 🐾 _Train in sim · stand with PD · deploy PPO on the real G1_
 
