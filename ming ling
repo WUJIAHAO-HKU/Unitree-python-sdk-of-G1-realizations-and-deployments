@@ -1,0 +1,9 @@
+(unitree_310_env) (base) wujiahao@wujiahao-System-Product-Name:~/ASAP/unitree_mujoco/simulate_python$ python3 unitree_mujoco.py
+
+
+(unitree_310_env) (base) wujiahao@wujiahao-System-Product-Name:~/ASAP/unitree_mujoco/simulate_python$ python3 test/deploy_standing_policy.py     --checkpoint ~/ASAP/logs/BigStrideWalking/bbb/model_800.pt     --onnx ~/ASAP/logs/BigStrideWalking/bbb/exported/model_800.onnx     --domain 1 --iface lo     --unnormalized-actions     --action-clip-unnormalized 0.2     --action-scale-unnormalized 0.5     --pd-scale 0.6     --startup-duration 0.5     --debug
+
+(unitree_310_env) (base) wujiahao@wujiahao-System-Product-Name:~/ASAP/unitree_mujoco/simulate_python$ python3 test/test_dds_connection_sim.py
+
+source /home/wujiahao/unitree_310_env/bin/activate
+
