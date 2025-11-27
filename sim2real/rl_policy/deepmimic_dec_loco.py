@@ -71,6 +71,7 @@ class MotionTrackingDecLocoPolicy(BasePolicy):
         self.policies_mimic = []
         self.policy_mimic_idx = 0
         self.policy_mimic_names = []
+        self.policy_mimic_input_dims = []
         self.policy_locomotion_mimic_flag = 0 # 0: locomotion, 1: mimic
         self.start_upper_dof_pos = []
         self.end_upper_dof_pos = np.zeros((1, 17))
@@ -83,6 +84,7 @@ class MotionTrackingDecLocoPolicy(BasePolicy):
         self.robot_dofs = config.get("robot_dofs", {})
         self.policy_mimic_robot_types = []
         self.policy_mimic_robot_dofs = []
+        self.default_mimic_obs_dim = None
         # Interpolation variables
         self.interpolation_done = False
         self.interpolation_active = False
@@ -133,10 +135,18 @@ class MotionTrackingDecLocoPolicy(BasePolicy):
         assert mimic_models_config, "No mimic models found in the configuration!"
 
         for policy_name, relative_path in mimic_models_config.items():
-            # Construct full path to the ONNX model
-            model_path = os.path.join(self.mimic_model_paths, os.path.join(policy_name, relative_path))
-            if not os.path.isfile(model_path):
-                raise FileNotFoundError(f"Model file not found at {model_path}")
+            # Allow both absolute paths and the original policy_name/relative layout
+            candidate_paths = []
+            if os.path.isabs(relative_path):
+                candidate_paths.append(relative_path)
+            else:
+                candidate_paths.append(os.path.join(self.mimic_model_paths,
+                                                    os.path.join(policy_name, relative_path)))
+                candidate_paths.append(os.path.join(self.mimic_model_paths, relative_path))
+            model_path = next((path for path in candidate_paths if os.path.isfile(path)), None)
+            if not model_path:
+                raise FileNotFoundError(f"Model file not found for policy '{policy_name}'. "
+                                        f"Tried: {candidate_paths}")
             
             print(f"Loading mimic policy '{policy_name}' from {model_path}")
 
@@ -144,6 +154,11 @@ class MotionTrackingDecLocoPolicy(BasePolicy):
             onnx_policy_session = onnxruntime.InferenceSession(model_path)
             onnx_input_name = onnx_policy_session.get_inputs()[0].name
             onnx_output_name = onnx_policy_session.get_outputs()[0].name
+            input_shape = onnx_policy_session.get_inputs()[0].shape
+            input_dim = None
+            if isinstance(input_shape, (list, tuple)) and len(input_shape) >= 2:
+                input_dim = input_shape[1]
+            self.policy_mimic_input_dims.append(input_dim)
 
             # Define the policy function
             def policy_act(obs, session=onnx_policy_session, input_name=onnx_input_name, output_name=onnx_output_name):
@@ -168,6 +183,9 @@ class MotionTrackingDecLocoPolicy(BasePolicy):
 
         # Record the number of mimic policies loaded
         self.num_mimic_policies = len(self.policies_mimic)
+        observed_dims = [dim for dim in self.policy_mimic_input_dims if isinstance(dim, (int, float))]
+        if observed_dims:
+            self.default_mimic_obs_dim = int(min(observed_dims))
         print(f"Successfully loaded {self.num_mimic_policies} mimic policies.")
 
 
@@ -202,15 +220,23 @@ class MotionTrackingDecLocoPolicy(BasePolicy):
             history_list.append(history_array)
         return np.concatenate(history_list, axis=1)
     
-    def _get_obs_history_mimic(self, obs_dims={}):
+    def _get_obs_history_mimic(self, obs_dims={}, override_keys=None):
         assert "history_mimic_config" in self.config.keys()
         history_config = self.config["history_mimic_config"]
         history_list = []
-        for key in sorted(history_config.keys()):
-            history_length = history_config[key]
+        keys = override_keys if override_keys is not None else sorted(history_config.keys())
+        for key in keys:
+            if key in history_config:
+                history_length = history_config[key]
+            else:
+                history_length = self.config["history_config"].get(key, 0)
+            if history_length is None or history_length <= 0:
+                continue
             history_array = self.history_handler.query(key)[:, :history_length]
             # Get the obs_dim from obs_dims if it exists, otherwise use the full obs_dim
-            obs_dim = obs_dims.get(key, history_array.shape[2])
+            obs_dim = obs_dims.get(key, None) if obs_dims else None
+            if obs_dim is None:
+                obs_dim = self.config["obs_dims"].get(key, history_array.shape[2])
             history_array = history_array[:, :, :obs_dim] # Shape: [4096, history_length, obs_dim]
             # Get the disired history obs elements
             if key == "actions" or key == "dof_pos" or key == "dof_vel":
@@ -218,6 +244,14 @@ class MotionTrackingDecLocoPolicy(BasePolicy):
             history_array = history_array.reshape(history_array.shape[0], -1)  # Shape: [4096, history_length*obs_dim]
             history_list.append(history_array)
         return np.concatenate(history_list, axis=1)
+
+    def _requires_extended_mimic_obs(self):
+        if not self.policy_mimic_input_dims:
+            return False
+        target_dim = self.policy_mimic_input_dims[self.policy_mimic_idx]
+        if not isinstance(target_dim, (int, float)) or self.default_mimic_obs_dim is None:
+            return False
+        return target_dim - self.default_mimic_obs_dim >= 5
     
     def next_mimic_policy(self,):
         self.policy_mimic_idx = (self.policy_mimic_idx + 1) % len(self.policies_mimic)
@@ -317,23 +351,39 @@ class MotionTrackingDecLocoPolicy(BasePolicy):
                                     ], axis=1)
         else:
             if self.use_history_mimic:
-                history_mimic = self._get_obs_history_mimic(self.obs_mimic_dims)
-                history_mimic *= self.obs_scales["history_mimic"]
+                if self._requires_extended_mimic_obs():
+                    history_keys = [
+                        "base_ang_vel",
+                        "projected_gravity",
+                        "dof_pos",
+                        "dof_vel",
+                        "actions",
+                        "sin_phase",
+                        "cos_phase",
+                    ]
+                    history_mimic = self._get_obs_history_mimic(self.obs_mimic_dims, override_keys=history_keys)
+                    history_mimic *= self.obs_scales["history_mimic"]
+                    phase_obs = np.concatenate([sin_phase, cos_phase], axis=1)
+                else:
+                    history_mimic = self._get_obs_history_mimic(self.obs_mimic_dims)
+                    history_mimic *= self.obs_scales["history_mimic"]
+                    phase_obs = np.array([[self.phase]])
                 obs = np.concatenate([self.last_action[:, self.policy_mimic_robot_dofs[self.policy_mimic_idx]],
                                     base_ang_vel*0.25,
                                     dof_pos_minus_default[:, self.policy_mimic_robot_dofs[self.policy_mimic_idx]], 
                                     dof_vel[:, self.policy_mimic_robot_dofs[self.policy_mimic_idx]]*0.05,
                                     history_mimic,
                                     projected_gravity,
-                                    np.array([[self.phase]])
+                                    phase_obs
                                     ], axis=1)
             else:
+                phase_obs = np.concatenate([sin_phase, cos_phase], axis=1) if self._requires_extended_mimic_obs() else np.array([[self.phase]])
                 obs = np.concatenate([self.last_action[:, self.policy_mimic_robot_dofs[self.policy_mimic_idx]], 
                                         base_ang_vel*0.25, 
                                         dof_pos_minus_default[:, self.policy_mimic_robot_dofs[self.policy_mimic_idx]], 
                                         dof_vel[:, self.policy_mimic_robot_dofs[self.policy_mimic_idx]]*0.05,
                                         projected_gravity,
-                                        np.array([[self.phase]])
+                                        phase_obs
                                         ], axis=1)
         # Yuanhang: update history handler afterwards
         if self.history_handler:
@@ -438,6 +488,7 @@ class MotionTrackingDecLocoPolicy(BasePolicy):
         
     def handle_keyboard_button(self, keycode):
         super().handle_keyboard_button(keycode)
+        print(f"[MIMIC] Key pressed: '{keycode}'")  # Debug output
         if keycode == "[":
             self.policy_locomotion_mimic_flag = 1 - self.policy_locomotion_mimic_flag
             self.frame_start_time = self.node.get_clock().now().nanoseconds / 1e9

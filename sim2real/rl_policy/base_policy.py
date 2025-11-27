@@ -243,20 +243,24 @@ class BasePolicy:
         listener.join()  # Keep the thread alive
 
     def handle_keyboard_button(self, keycode):
+        print(f"[KEYBOARD] Key pressed: '{keycode}'")  # Debug output
         if keycode == "]":
             self.use_policy_action = True
             self.get_ready_state = False
-            self.node.get_logger().info("Using policy actions")
+            self.node.get_logger().info("✅ Using policy actions - POLICY ACTIVATED!")
+            print("✅ POLICY ACTIVATED! Robot should start moving now.")
             # self.frame_start_time = self.node.get_clock().now().nanoseconds / 1e9
             self.phase = 0.0
         elif keycode == "o":
             self.use_policy_action = False
             self.get_ready_state = False
-            self.node.get_logger().info("Actions set to zero")
+            self.node.get_logger().info("🛑 Actions set to zero - EMERGENCY STOP!")
+            print("🛑 EMERGENCY STOP! Policy deactivated.")
         elif keycode == "i":
             self.get_ready_state = True
             self.init_count = 0
-            self.node.get_logger().info("Setting to init state")
+            self.node.get_logger().info("🔄 Setting to init state")
+            print("🔄 Setting robot to initial position...")
         elif keycode == "w" and self.stand_command:
             self.lin_vel_command[0, 0]+=0.1
         elif keycode == "s" and self.stand_command:

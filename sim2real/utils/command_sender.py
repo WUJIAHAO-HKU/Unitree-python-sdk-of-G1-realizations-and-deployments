@@ -3,7 +3,8 @@ import numpy as np
 from unitree_sdk2py.core.channel import ChannelPublisher
 
 from unitree_sdk2py.utils.crc import CRC
-from utils.robot import Robot
+
+from sim2real.utils.robot import Robot
 from termcolor import colored
 
 class CommandSender:

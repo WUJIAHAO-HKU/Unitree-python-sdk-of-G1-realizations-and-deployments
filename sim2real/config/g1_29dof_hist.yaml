@@ -387,8 +387,8 @@ mimic_robot_types: {
   "side_jump_level2": "g1_29dof_anneal_23dof",
   "side_jump_level3": "g1_29dof_anneal_23dof",
 
-
-
+  "walk_level1": "g1_29dof_anneal_23dof",
+  "walk_level1_bigstride": "g1_29dof_anneal_23dof"
 }
 
 mimic_models: {
@@ -413,8 +413,8 @@ mimic_models: {
   "side_jump_level2": "model_131500.onnx",
   "side_jump_level3": "model_245000.onnx",
 
-
-
+  "walk_level1": "/home/wujiahao/ASAP/logs/WalkingMotionTracking/mu_qian_zui_hao_de/exported/model_900.onnx",
+  "walk_level1_bigstride": "/home/wujiahao/ASAP/logs/BigStrideWalking/bbb/exported/model_900.onnx"
 }
 
 
@@ -534,9 +534,18 @@ start_upper_body_dof_pos: {
   0.007447139825671911, 0.10121755301952362, 0.05996187403798103
   ],
 
-
-
-
+  "walk_level1":
+  [0.10668974369764328, 0.06626419723033905, -0.2859264612197876, 
+  0.08602382987737656, 0.3381357192993164, -0.6762647032737732, 1.0436335802078247,
+  0.0, 0.0, 0.0,
+  0.10625263303518295, -0.27657341957092285, 0.8412381410598755, 0.9902060627937317,
+  0.0, 0.0, 0.0],
+  "walk_level1_bigstride":
+  [0.10668974369764328, 0.06626419723033905, -0.2859264612197876, 
+  0.08602382987737656, 0.3381357192993164, -0.6762647032737732, 1.0436335802078247,
+  0.0, 0.0, 0.0,
+  0.10625263303518295, -0.27657341957092285, 0.8412381410598755, 0.9902060627937317,
+  0.0, 0.0, 0.0]
 }
 
 motion_length_s: {
@@ -567,5 +576,6 @@ motion_length_s: {
   "side_jump_level2": 3.56,
   "side_jump_level3": 3.66,
 
-
+  "walk_level1": 50.067,
+  "walk_level1_bigstride": 50.067
 }

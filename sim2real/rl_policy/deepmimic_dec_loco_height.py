@@ -178,23 +178,39 @@ class MotionTrackingDecLocoHeightPolicy(MotionTrackingDecLocoPolicy):
                                     ], axis=1)
         else:
             if self.use_history_mimic:
-                history_mimic = self._get_obs_history_mimic(self.obs_mimic_dims)
-                history_mimic *= self.obs_scales["history_mimic"]
+                if self._requires_extended_mimic_obs():
+                    history_keys = [
+                        "base_ang_vel",
+                        "projected_gravity",
+                        "dof_pos",
+                        "dof_vel",
+                        "actions",
+                        "sin_phase",
+                        "cos_phase",
+                    ]
+                    history_mimic = self._get_obs_history_mimic(self.obs_mimic_dims, override_keys=history_keys)
+                    history_mimic *= self.obs_scales["history_mimic"]
+                    phase_obs = np.concatenate([sin_phase, cos_phase], axis=1)
+                else:
+                    history_mimic = self._get_obs_history_mimic(self.obs_mimic_dims)
+                    history_mimic *= self.obs_scales["history_mimic"]
+                    phase_obs = np.array([[self.phase]])
                 obs = np.concatenate([self.last_action[:, self.policy_mimic_robot_dofs[self.policy_mimic_idx]],
                                     base_ang_vel*0.25,
                                     dof_pos_minus_default[:, self.policy_mimic_robot_dofs[self.policy_mimic_idx]], 
                                     dof_vel[:, self.policy_mimic_robot_dofs[self.policy_mimic_idx]]*0.05,
                                     history_mimic,
                                     projected_gravity,
-                                    np.array([[self.phase]])
+                                    phase_obs
                                     ], axis=1)
             else:
+                phase_obs = np.concatenate([sin_phase, cos_phase], axis=1) if self._requires_extended_mimic_obs() else np.array([[self.phase]])
                 obs = np.concatenate([self.last_action[:, self.policy_mimic_robot_dofs[self.policy_mimic_idx]], 
                                         base_ang_vel*0.25, 
                                         dof_pos_minus_default[:, self.policy_mimic_robot_dofs[self.policy_mimic_idx]], 
                                         dof_vel[:, self.policy_mimic_robot_dofs[self.policy_mimic_idx]]*0.05,
                                         projected_gravity,
-                                        np.array([[self.phase]])
+                                        phase_obs
                                         ], axis=1)
         # Yuanhang: update history handler afterwards
         if self.history_handler:

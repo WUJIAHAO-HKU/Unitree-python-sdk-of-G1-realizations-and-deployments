@@ -7,7 +7,7 @@ from unitree_sdk2py.idl.unitree_hg.msg.dds_ import LowState_ as LowState_hg
 from unitree_sdk2py.core.channel import ChannelSubscriber
 
 from loguru import logger
-from utils.robot import Robot
+from sim2real.utils.robot import Robot
 
 class StateProcessor:
     def __init__(self, config):

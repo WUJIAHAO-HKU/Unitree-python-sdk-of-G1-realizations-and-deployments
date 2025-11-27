@@ -9,7 +9,7 @@ from hydra.core.config_store import ConfigStore
 from omegaconf import OmegaConf
 from humanoidverse.utils.logging import HydraLoggerBridge
 import logging
-from utils.config_utils import *  # noqa: E402, F403
+from humanoidverse.utils.config_utils import *  # noqa: E402, F403
 
 # add argparse arguments
 
