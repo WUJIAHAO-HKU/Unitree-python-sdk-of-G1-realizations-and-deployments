@@ -161,3 +161,18 @@
 - HumanoidVerse 文档：掌握训练命令与配置体系。
 
 如需进一步扩展（如多机协同、其他机器人），请在此分支基础上继续提交 PR。
+
+---
+
+## 10. 致谢与引用
+- **Unitree 官方论文引用**  
+  ```
+  @article{unitree2024g1,
+    title={Unitree G1: General-Purpose Humanoid Platform for Real-World Deployment},
+    author={Unitree Robotics},
+    journal={Unitree Technical Whitepaper},
+    year={2024}
+  }
+  ```
+- **原始 ASAP 仓库**  
+  本分支的动捕与残差学习流程深受 [LeCAR-Lab/ASAP](https://github.com/LeCAR-Lab/ASAP) 启发，感谢原作者开放代码与数据资料。
