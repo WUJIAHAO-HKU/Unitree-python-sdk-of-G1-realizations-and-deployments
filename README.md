@@ -583,26 +583,6 @@ Deploying these models on physical hardware can be hazardous. Unless you have de
 We provide a demo code to collect real-world data in the `sim2real/rl_policy/listener_deltaa.py` file. Since MoCap setup is hard to transfer across different robots/labs, we hope this code can help you to collect data for your own experiments. Contact us (tairanh@andrew.cmu.edu) if you have any questions.
 
 
-
-
-
-# Citation
-If you find our work useful, please consider citing us!
-
-```bibtex
-@article{he2025asap,
-  title={ASAP: Aligning Simulation and Real-World Physics for Learning Agile Humanoid Whole-Body Skills},
-  author={He, Tairan and Gao, Jiawei and Xiao, Wenli and Zhang, Yuanhang and Wang, Zi and Wang, Jiashun and Luo, Zhengyi and He, Guanqi and Sobanbabu, Nikhil and Pan, Chaoyi and Yi, Zeji and Qu, Guannan and Kitani, Kris and Hodgins, Jessica and Fan, Linxi "Jim" and Zhu, Yuke and Liu, Changliu and Shi, Guanya},
-  journal={arXiv preprint arXiv:2502.01143},
-  year={2025}
-}
-```
-
-# License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-
 ## 更换参考动作数据集指南
 本指南说明如何将项目中的 CR7 参考动作数据集更换为其他动作数据。
 
@@ -1221,4 +1201,21 @@ python humanoidverse/train_agent.py \
 4. ✅ **验证测试**：使用小规模配置快速验证
 
 如有问题，请参考项目中的其他动作数据文件作为示例，或查看相关文档。
+
+
+# Citation
+If you find our work useful, please consider citing us!
+
+```bibtex
+@article{he2025asap,
+  title={ASAP: Aligning Simulation and Real-World Physics for Learning Agile Humanoid Whole-Body Skills},
+  author={He, Tairan and Gao, Jiawei and Xiao, Wenli and Zhang, Yuanhang and Wang, Zi and Wang, Jiashun and Luo, Zhengyi and He, Guanqi and Sobanbabu, Nikhil and Pan, Chaoyi and Yi, Zeji and Qu, Guannan and Kitani, Kris and Hodgins, Jessica and Fan, Linxi "Jim" and Zhu, Yuke and Liu, Changliu and Shi, Guanya},
+  journal={arXiv preprint arXiv:2502.01143},
+  year={2025}
+}
+```
+
+# License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
