@@ -10,13 +10,36 @@
 {
     'motion0': {
         'root_trans_offset': np.ndarray,  # [T, 3] 必需 - 根部（骨盆）位置，不是足部
-        'pose_aa': np.ndarray,            # [T, num_joints, 3] 必需 - 姿态角轴表示
+        'pose_aa': np.ndarray,            # [T, num_joints, 3] 必需 - 姿态角轴表示（轴角向量）
         'fps': float,                     # 必需 - 帧率（推荐30fps）
     }
 }
 ```
 
 **重要**：只需要这3个字段！其他字段（如 `dof`, `root_rot` 等）会在加载时自动计算。
+
+### `pose_aa` 核心概念（轴角表示）
+
+**轴角（Axis-Angle）** 是一种3D旋转表示方法：
+- **格式**：3维向量 `[rx, ry, rz]`
+- **含义**：
+  - 向量**方向**（归一化后）= 旋转轴
+  - 向量**长度**（模）= 旋转角度（弧度）
+- **例子**：
+  - `[0, 0, 1.57]` = 绕Z轴旋转90度（π/2）
+  - `[1.0, 0, 0]` = 绕X轴旋转57.3度（1弧度）
+  - `[0, 0, 0]` = 无旋转
+- **索引0** = 根部（骨盆）全局旋转
+- **索引1+** = 其他关节相对父关节的局部旋转
+
+**快速转换**（从四元数或欧拉角）：
+```python
+from scipy.spatial.transform import Rotation as sRot
+# 从四元数: quat [x,y,z,w] -> 轴角
+axis_angle = sRot.from_quat([0, 0, 0.707, 0.707]).as_rotvec()
+# 从欧拉角: euler [x,y,z] -> 轴角
+axis_angle = sRot.from_euler('xyz', [0, 0, np.pi/2]).as_rotvec()
+```
 
 ### CR7数据参考
 
@@ -145,10 +168,20 @@ MotionLib 拿到 `root_trans_offset`、`pose_aa` 和 `fps` 后，会通过机器
   - **注意**：z坐标通常是机器人的根部高度（站立时约0.7-1.0米），而不是地面高度（0米）
 
 - **`pose_aa`** `[T, num_joints, 3]`：
-  - 所有关节的姿态，使用角轴（axis-angle）表示
+  - **角轴（Axis-Angle）表示**：所有关节的旋转，使用**轴角**格式表示
+  - **什么是轴角**：一个3维向量 `[rx, ry, rz]`，其中：
+    - **方向**（向量归一化后）= 旋转轴
+    - **长度**（向量的模）= 旋转角度（弧度）
+    - 例如：`[0, 0, 1.57]` 表示绕Z轴旋转90度（π/2弧度）
+  - **索引0是根部关节**：`pose_aa[:, 0, :]` 是根部（骨盆/腰部）的全局旋转
+  - **索引1+是其他关节**：`pose_aa[:, 1:, :]` 是各个关节相对于父关节的局部旋转
   - `num_joints` 包括根部关节（索引0）和所有其他关节
   - 对于 `g1_29dof_anneal_23dof`，通常 `num_joints = 24`（1个根部 + 23个关节）
-  - 每个关节的旋转用3维向量表示（旋转轴 × 旋转角度）
+  - **与四元数的关系**：轴角可以通过 `scipy.spatial.transform.Rotation` 转换为四元数或旋转矩阵
+  - **与关节角（DOF）的区别**：
+    - `pose_aa` 是3D旋转的完整表示（每个关节3个自由度）
+    - `dof` 是机器人实际可控的关节角度（通常1个自由度/关节，如肘关节只有屈伸）
+    - 代码会从 `pose_aa` 投影计算出 `dof`
 
 - **`fps`** `float`：
   - 帧率（frames per second）
@@ -163,6 +196,7 @@ MotionLib 拿到 `root_trans_offset`、`pose_aa` 和 `fps` 后，会通过机器
 ```python
 import numpy as np
 import joblib
+from scipy.spatial.transform import Rotation as sRot
 
 # 假设有 100 帧，24 个关节（1个根部 + 23个关节）
 T = 100
@@ -179,6 +213,74 @@ motion_data = {
 # 保存
 joblib.dump(motion_data, 'your_motion.pkl')
 ```
+
+#### `pose_aa` 实际例子
+
+如果你有四元数或欧拉角数据，需要转换为轴角格式：
+
+```python
+from scipy.spatial.transform import Rotation as sRot
+import numpy as np
+
+# 方法1: 从四元数转换
+# 假设有一个四元数 [x, y, z, w] 表示旋转
+quat = [0.0, 0.0, 0.707, 0.707]  # 绕Z轴旋转90度
+rot = sRot.from_quat(quat)  # scipy使用 [x,y,z,w] 格式
+axis_angle = rot.as_rotvec()  # 转换为轴角 [rx, ry, rz]
+print(f"轴角: {axis_angle}")  # 输出: [0, 0, 1.57...] (约π/2)
+
+# 方法2: 从欧拉角转换
+euler_xyz = [0.0, 0.0, np.pi/2]  # 绕Z轴旋转90度 (XYZ顺序)
+rot = sRot.from_euler('xyz', euler_xyz)
+axis_angle = rot.as_rotvec()
+print(f"轴角: {axis_angle}")  # 输出: [0, 0, 1.57...]
+
+# 方法3: 直接构造轴角
+# 轴角 = 旋转轴(归一化) × 旋转角度(弧度)
+rotation_axis = np.array([0, 0, 1])  # Z轴
+rotation_angle = np.pi / 2  # 90度
+axis_angle = rotation_axis * rotation_angle
+print(f"轴角: {axis_angle}")  # 输出: [0, 0, 1.57...]
+
+# 用于 pose_aa 的完整示例
+T = 100
+num_joints = 24
+pose_aa = np.zeros((T, num_joints, 3), dtype=np.float32)
+
+# 设置根部旋转（第0个关节）- 例如机器人面向前方
+for t in range(T):
+    # 随时间轻微旋转根部
+    angle = 0.1 * np.sin(2 * np.pi * t / T)  # 小幅摆动
+    pose_aa[t, 0, :] = [0, 0, angle]  # 绕Z轴旋转
+
+# 设置肘关节弯曲（假设是第5个关节）
+for t in range(T):
+    bend_angle = np.pi / 4 * (1 + np.sin(2 * np.pi * t / T))  # 45-90度之间
+    # 假设肘关节绕Y轴弯曲
+    pose_aa[t, 5, :] = [0, bend_angle, 0]
+
+print(f"pose_aa 形状: {pose_aa.shape}")  # (100, 24, 3)
+```
+
+#### 理解轴角的直觉
+
+轴角向量 `[rx, ry, rz]` 可以这样理解：
+
+- **向量方向** = 旋转轴（穿过关节的虚拟杆）
+- **向量长度** = 旋转多少弧度（右手定则）
+- **零向量** `[0, 0, 0]` = 无旋转（初始姿态）
+
+常见例子：
+- `[1.57, 0, 0]`: 绕X轴旋转90度（俯仰）
+- `[0, 1.57, 0]`: 绕Y轴旋转90度（偏航）
+- `[0, 0, 1.57]`: 绕Z轴旋转90度（横滚）
+- `[0, 0.785, 0]`: 绕Y轴旋转45度
+
+**为什么使用轴角而不是欧拉角？**
+- 轴角没有万向节锁（gimbal lock）问题
+- 插值更平滑（可以直接线性插值小角度）
+- 与SMPL等人体模型标准兼容
+- 易于转换到其他格式（四元数、旋转矩阵）
 
 ### 2. 机器人配置要求
 
@@ -582,6 +684,46 @@ python humanoidverse/train_agent.py \
 - **用途**：保存控制器/策略在每一帧输出的命令（关节角、力矩、末端力等），方便后续训练复现或做残差学习。
 - **是否必需**：不是必需；只有当你希望在训练中使用这些命令时才需要写入。
 - **采集方法**：在采集脚本里，与动捕帧同步记录控制命令，组成 `[T, action_dim]` 的数组并存入 `action` 字段；若没有控制信号，可直接忽略该字段。
+
+### Q10: `pose_aa` 与机器人实际关节角（DOF）有什么关系？
+
+**核心区别**：
+
+| 概念 | `pose_aa` | `dof` (关节角) |
+|------|-----------|----------------|
+| **定义** | 3D空间中的完整旋转表示 | 机器人实际可控的关节角度 |
+| **维度** | 每个关节3个值（轴角向量） | 每个关节1个值（通常） |
+| **自由度** | 理论上3自由度（任意旋转） | 实际受机械限制（如肘关节只能屈伸） |
+| **用途** | 描述人体/动捕数据的姿态 | 控制机器人电机 |
+| **例子** | `[0.5, 0.3, 0.1]` 表示复杂的3D旋转 | `1.2` 弧度表示肘关节弯曲角度 |
+
+**转换过程**：
+```
+动捕数据 pose_aa [T, 24, 3]
+    ↓ (通过骨架映射和投影)
+机器人关节角 dof [T, 23]
+    ↓ (通过PD控制器)
+电机命令
+```
+
+**实际代码中的转换**（在 `motion_lib_base.py` 和 `fit_smpl_motion.py` 中）：
+1. **Forward Kinematics (FK)**：从 `pose_aa` + `root_trans_offset` 计算全身各关节的3D位置
+2. **Inverse Kinematics (IK) 或优化**：找到最接近目标位置的机器人关节角 `dof`
+3. **关节映射**：将人体骨架的关节映射到机器人关节（如 SMPL 的 "L_Elbow" → 机器人的 "left_elbow"）
+
+**为什么需要这个转换？**
+- 人体模型（如SMPL）使用3D旋转描述所有关节（适合动捕）
+- 机器人有机械限制，很多关节只有1个自由度（如膝盖、肘部）
+- 需要从理论姿态提取出机器人能实际执行的命令
+
+**示例**：
+```python
+# 人体肘关节的 pose_aa（可以有复杂的3D旋转）
+pose_aa_elbow = [0.3, 1.2, 0.1]  # 3个值
+
+# 转换后机器人肘关节只有屈伸
+dof_elbow = 1.2  # 1个值（弯曲角度）
+```
 
 ---
 
